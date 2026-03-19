@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Who's The GOAT? 🏀</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBVsXvrTglnTY8BOwjBXc1Qp5K45L9LVJE",
+    authDomain: "goat--vote1.firebaseapp.com",
+    databaseURL: "https://goat--vote1-default-rtdb.firebaseio.com",
+    projectId: "goat--vote1",
+    storageBucket: "goat--vote1.firebasestorage.app",
+    messagingSenderId: "240656651536",
+    appId: "1:240656651536:web:ff0dcb1323535e40fe0195"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  window._fb = { db, ref, onValue, set, update, remove };
+</script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#080810;min-height:100vh}
+  body{font-family:'Trebuchet MS',sans-serif;color:#fff;overflow-x:hidden}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  .rank-row{transition:transform .15s,box-shadow .15s,border-color .15s}
+  .rank-row.drag-over{border-color:#ff6b35!important;transform:scale(1.015)}
+  .rank-row.is-dragging{opacity:.35}
+  .updown{background:#0e0e1a;border:1px solid #222;color:#555;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.8rem;transition:all .15s;flex-shrink:0}
+  .updown:hover:not(:disabled){border-color:#ff6b35;color:#ff6b35}
+  .updown:disabled{opacity:.2;cursor:default}
+  .tab{transition:all .2s;cursor:pointer;border:none}
+  .cta{transition:all .25s!important}
+  .cta:hover{transform:translateY(-2px)!important;box-shadow:0 14px 40px rgba(255,107,53,.4)!important}
+  input:focus{border-color:#ff6b35!important;outline:none}
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-track{background:#0a0a12}
+  ::-webkit-scrollbar-thumb{background:#ff6b35}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:#4caf50;display:inline-block;margin-right:5px;animation:pulse 1.5s ease infinite}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const DEFAULT_PLAYERS = [
+  { id: 1, name: "Player 1", emoji: "🏀" },
+  { id: 2, name: "Player 2", emoji: "⚡" },
+  { id: 3, name: "Player 3", emoji: "🔥" },
+  { id: 4, name: "Player 4", emoji: "💪" },
+  { id: 5, name: "Player 5", emoji: "🎯" },
+  { id: 6, name: "Player 6", emoji: "👑" },
+];
+
+const EMOJIS = ["🏀","⚡","🔥","💪","🎯","👑","🐐","💯","🦅","🌪️","🏆","⭐","😤","🥶","🫡","🐉"];
+
+function getBadge(rank) {
+  if (rank === 0) return { icon: "👑", color: "#FFD700" };
+  if (rank === 1) return { icon: "2", color: "#C0C0C0" };
+  if (rank === 2) return { icon: "3", color: "#CD7F32" };
+  return { icon: `${rank + 1}`, color: "#444" };
+}
+
+const DEVICE_KEY = "goat-vote-device-voted";
+
+function App() {
+  const [data, setData] = useState({ players: DEFAULT_PLAYERS, ballots: {} });
+  const [connected, setConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState("leaderboard");
+  const [voterName, setVoterName] = useState("");
+  const [nameInput, setNameInput] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [ranking, setRanking] = useState([]);
+  const [dragOver, setDragOver] = useState(null);
+  const [dragging, setDragging] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [deviceVoted, setDeviceVoted] = useState(() => !!localStorage.getItem(DEVICE_KEY));
+  const [toast, setToast] = useState(null);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [adminInput, setAdminInput] = useState("");
+  const [newPlayerName, setNewPlayerName] = useState("");
+  const [newPlayerEmoji, setNewPlayerEmoji] = useState("🏀");
+
+  // Wait for Firebase to load then subscribe to live data
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!window._fb) return;
+      clearInterval(interval);
+      const { db, ref, onValue } = window._fb;
+
+      // Subscribe to live updates — fires instantly on any change from anyone
+      const dataRef = ref(db, "goat-vote");
+      onValue(dataRef, (snapshot) => {
+        const val = snapshot.val();
+        if (val) {
+          setData({
+            players: val.players ? Object.values(val.players) : DEFAULT_PLAYERS,
+            ballots: val.ballots || {}
+          });
+        } else {
+          // First time — initialize database with default players
+          const { set } = window._fb;
+          const playersObj = {};
+          DEFAULT_PLAYERS.forEach(p => { playersObj[p.id] = p; });
+          set(ref(db, "goat-vote"), { players: playersObj, ballots: {} });
+        }
+        setConnected(true);
+        setLoading(false);
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
+
+  function showToast(msg, type = "success") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function enterVote() {
+    setRanking(data.players.map(p => p.id));
+    setView("vote");
+  }
+
+  function computePoints(ballots, players) {
+    const n = players.length;
+    const pts = {};
+    players.forEach(p => { pts[p.id] = 0; });
+    Object.values(ballots).forEach(ballot => {
+      const arr = Array.isArray(ballot) ? ballot : Object.values(ballot);
+      arr.forEach((id, idx) => {
+        const awarded = n - idx;
+        if (pts[id] !== undefined) pts[id] += awarded;
+      });
+    });
+    return pts;
+  }
+
+  function getSortedPlayers() {
+    const pts = computePoints(data.ballots, data.players);
+    return [...data.players].sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0));
+  }
+
+  function getPoints(id) {
+    return computePoints(data.ballots, data.players)[id] || 0;
+  }
+
+  function getMaxPoints() {
+    const vals = Object.values(computePoints(data.ballots, data.players));
+    return Math.max(...vals, 1);
+  }
+
+  function totalBallots() {
+    return Object.keys(data.ballots).length;
+  }
+
+  function onDragStart(e, id) { setDragging(id); e.dataTransfer.effectAllowed = "move"; }
+  function onDragOver(e, id) { e.preventDefault(); setDragOver(id); }
+  function onDrop(e, targetId) {
+    e.preventDefault();
+    if (dragging === targetId) { setDragging(null); setDragOver(null); return; }
+    const r = [...ranking];
+    const fi = r.indexOf(dragging), ti = r.indexOf(targetId);
+    r.splice(fi, 1); r.splice(ti, 0, dragging);
+    setRanking(r); setDragging(null); setDragOver(null);
+  }
+  function onDragEnd() { setDragging(null); setDragOver(null); }
+  function moveUp(id) {
+    const idx = ranking.indexOf(id); if (idx === 0) return;
+    const r = [...ranking]; [r[idx-1], r[idx]] = [r[idx], r[idx-1]]; setRanking(r);
+  }
+  function moveDown(id) {
+    const idx = ranking.indexOf(id); if (idx === ranking.length-1) return;
+    const r = [...ranking]; [r[idx+1], r[idx]] = [r[idx], r[idx+1]]; setRanking(r);
+  }
+
+  function handleNameSubmit() {
+    const name = nameInput.trim();
+    if (!name) return;
+    // Check if name already used in Firebase ballots
+    const key = name.toLowerCase().replace(/[.#$/\[\]]/g, "_");
+    if (data.ballots && data.ballots[key] !== undefined) {
+      setNameError("That name already voted! Use your real name.");
+      return;
+    }
+    setVoterName(name);
+    setNameError("");
+  }
+
+  function submitBallot() {
+    if (!window._fb) return;
+    const { db, ref, set } = window._fb;
+    const key = voterName.trim().toLowerCase().replace(/[.#$/\[\]]/g, "_");
+    set(ref(db, `goat-vote/ballots/${key}`), ranking);
+    // Lock this device
+    localStorage.setItem(DEVICE_KEY, "1");
+    setDeviceVoted(true);
+    setSubmitted(true);
+    showToast("Ballot locked in! 🏀");
+  }
+
+  function addPlayer() {
+    if (!newPlayerName.trim() || !window._fb) return;
+    const { db, ref, set } = window._fb;
+    const p = { id: Date.now(), name: newPlayerName.trim(), emoji: newPlayerEmoji };
+    set(ref(db, `goat-vote/players/${p.id}`), p);
+    setNewPlayerName("");
+    showToast(`${p.name} added!`);
+  }
+
+  function removePlayer(id) {
+    if (!window._fb) return;
+    const { db, ref, remove } = window._fb;
+    remove(ref(db, `goat-vote/players/${id}`));
+    remove(ref(db, `goat-vote/ballots`)); // clear ballots when roster changes
+    showToast("Player removed. Votes reset.");
+  }
+
+  function resetAll() {
+    if (!window._fb) return;
+    const { db, ref, remove } = window._fb;
+    remove(ref(db, `goat-vote/ballots`));
+    localStorage.removeItem(DEVICE_KEY);
+    setDeviceVoted(false);
+    setSubmitted(false);
+    setVoterName("");
+    showToast("All votes reset!");
+  }
+
+  if (loading) return (
+    <div style={{ background:"#080810", minHeight:"100vh", display:"flex", flexDirection:"column",
+      alignItems:"center", justifyContent:"center", gap:"1rem" }}>
+      <div style={{ fontSize:"2.5rem" }}>🏀</div>
+      <div style={{ color:"#ff6b35", fontFamily:"monospace", fontSize:"1rem", letterSpacing:"0.3em" }}>
+        CONNECTING...
+      </div>
+    </div>
+  );
+
+  const sorted = getSortedPlayers();
+  const maxPts = getMaxPoints();
+  const numBallots = totalBallots();
+  const n = data.players.length;
+
+  return (
+    <div style={{ background:"#080810", minHeight:"100vh", position:"relative" }}>
+      <div style={{ position:"fixed", inset:0, pointerEvents:"none",
+        background:"radial-gradient(ellipse at 50% 0%, rgba(255,107,53,0.07) 0%, transparent 55%)" }}/>
+      <svg style={{ position:"fixed", inset:0, width:"100%", height:"100%", pointerEvents:"none", opacity:0.03 }}>
+        <circle cx="50%" cy="50%" r="130" fill="none" stroke="#ff6b35" strokeWidth="1"/>
+        <circle cx="50%" cy="50%" r="240" fill="none" stroke="#ff6b35" strokeWidth="0.5"/>
+        <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#ff6b35" strokeWidth="0.5"/>
+      </svg>
+
+      {toast && (
+        <div style={{ position:"fixed", top:"1.4rem", left:"50%", transform:"translateX(-50%)",
+          background:toast.type==="error"?"#991100":"#ff6b35",
+          color:"#fff", padding:"0.65rem 1.8rem", zIndex:999,
+          fontWeight:"700", fontSize:"0.88rem", letterSpacing:"0.05em",
+          boxShadow:"0 8px 30px rgba(255,107,53,.4)", animation:"slideDown .3s ease", whiteSpace:"nowrap" }}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div style={{ maxWidth:"640px", margin:"0 auto", padding:"0 1rem 5rem", position:"relative", zIndex:1 }}>
+
+        {/* HEADER */}
+        <div style={{ textAlign:"center", padding:"2.5rem 0 1.5rem" }}>
+          <div style={{ fontSize:"0.67rem", letterSpacing:"0.45em", color:"#ff6b35", marginBottom:"0.5rem" }}>
+            ◆ &nbsp; SQUAD RANKED BALLOT &nbsp; ◆
+          </div>
+          <h1 style={{ fontSize:"clamp(1.9rem,8vw,3rem)", fontWeight:"900",
+            background:"linear-gradient(135deg,#fff 0%,#ff6b35 55%,#ff2200 100%)",
+            WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
+            letterSpacing:"-0.02em", lineHeight:1, marginBottom:"0.4rem" }}>
+            WHO'S THE GOAT?
+          </h1>
+          <p style={{ color:"#444", fontSize:"0.82rem", letterSpacing:"0.1em" }}>
+            <span className="live-dot"></span>
+            {numBallots} ballot{numBallots!==1?"s":""} &nbsp;·&nbsp; 1st = {n}pts · last = 1pt &nbsp;·&nbsp; <span style={{color:"#4caf50"}}>live</span>
+          </p>
+        </div>
+
+        {/* NAV */}
+        <div style={{ display:"flex", marginBottom:"2rem", border:"1px solid #1a1a26", overflow:"hidden" }}>
+          {[
+            {id:"leaderboard", label:"🏆 STANDINGS"},
+            {id:"vote",        label:"🗳️ CAST BALLOT"},
+            {id:"admin",       label:"⚙️ MANAGE"},
+          ].map(tab => (
+            <button key={tab.id} className="tab"
+              onClick={() => tab.id==="vote" ? enterVote() : setView(tab.id)}
+              style={{ flex:1, padding:"0.78rem",
+                background:view===tab.id?"#ff6b35":"transparent",
+                color:view===tab.id?"#fff":"#555",
+                fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.7rem",
+                fontWeight:"700", letterSpacing:"0.1em" }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ══ STANDINGS ══ */}
+        {view==="leaderboard" && (
+          <div>
+            <div style={{ background:"#0c0c16", border:"1px solid #1a1a26",
+              padding:"0.85rem 1.2rem", marginBottom:"1rem",
+              display:"flex", alignItems:"center", gap:"0.8rem", flexWrap:"wrap" }}>
+              <span style={{ fontSize:"0.7rem", color:"#444", letterSpacing:"0.12em" }}>SCORING:</span>
+              <span style={{ fontSize:"0.72rem", color:"#666" }}>
+                1st = {n}pts &nbsp;·&nbsp; 2nd = {n-1}pts &nbsp;·&nbsp; last = 1pt
+              </span>
+              <span style={{ marginLeft:"auto", color:"#ff6b35", fontWeight:"700", fontSize:"0.75rem" }}>
+                {numBallots} voter{numBallots!==1?"s":""}
+              </span>
+            </div>
+
+            {sorted.length === 0 ? (
+              <div style={{ textAlign:"center", color:"#444", padding:"3rem", fontSize:"0.9rem" }}>
+                No players yet. Go to Manage to add some!
+              </div>
+            ) : sorted.map((player, i) => {
+              const pts = getPoints(player.id);
+              const pct = maxPts > 0 ? (pts/maxPts)*100 : 0;
+              const badge = getBadge(i);
+              const isFirst = i===0 && pts>0;
+              return (
+                <div key={player.id} style={{
+                  background:isFirst?"linear-gradient(135deg,#1c0900,#110500)":"#0c0c16",
+                  border:`1px solid ${isFirst?"#ff6b35":"#1a1a26"}`,
+                  padding:"1.2rem 1.4rem", marginBottom:"0.65rem",
+                  position:"relative", overflow:"hidden",
+                  animation:`fadeUp .4s ${i*.06}s ease both`,
+                  boxShadow:isFirst?"0 6px 30px rgba(255,107,53,.12)":"none",
+                }}>
+                  {isFirst && <div style={{ position:"absolute", top:0, left:0, right:0, height:"2px",
+                    background:"linear-gradient(90deg,transparent,#ff6b35,transparent)" }}/>}
+                  <div style={{ display:"flex", alignItems:"center", gap:"0.9rem", marginBottom:"0.8rem" }}>
+                    <div style={{ width:"40px", height:"40px", flexShrink:0,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      background:"#080810", border:`1px solid ${badge.color}44`,
+                      fontSize:i===0?"1.4rem":"0.9rem", fontWeight:"900", color:badge.color }}>
+                      {badge.icon}
+                    </div>
+                    <span style={{ fontSize:"1.6rem" }}>{player.emoji}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:"800", fontSize:"1rem",
+                        color:isFirst?"#ff6b35":"#fff" }}>{player.name}</div>
+                    </div>
+                    <div style={{ textAlign:"right", flexShrink:0 }}>
+                      <div style={{ fontSize:"1.9rem", fontWeight:"900", lineHeight:1,
+                        color:isFirst?"#ff6b35":"#ddd", letterSpacing:"-0.03em" }}>{pts}</div>
+                      <div style={{ fontSize:"0.62rem", color:"#444", letterSpacing:"0.12em" }}>POINTS</div>
+                    </div>
+                  </div>
+                  <div style={{ background:"#080810", height:"4px", overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${pct}%`,
+                      background:isFirst?"linear-gradient(90deg,#cc2200,#ff6b35)":"linear-gradient(90deg,#1e1e2a,#333)",
+                      transition:"width 1s ease" }}/>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div style={{ textAlign:"center", marginTop:"2rem" }}>
+              <button className="cta" onClick={enterVote} style={{
+                background:"linear-gradient(135deg,#ff6b35,#cc2200)", color:"#fff", border:"none",
+                padding:"0.9rem 2.5rem", fontFamily:"'Trebuchet MS',sans-serif",
+                fontSize:"0.78rem", fontWeight:"700", letterSpacing:"0.2em",
+                cursor:"pointer", boxShadow:"0 4px 20px rgba(255,107,53,.3)" }}>
+                CAST YOUR BALLOT →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══ VOTE ══ */}
+        {view==="vote" && (
+          <div style={{ animation:"fadeUp .35s ease" }}>
+            {deviceVoted ? (
+              <div style={{ background:"#0c0c16", border:"1px solid #882200", padding:"2.5rem", textAlign:"center" }}>
+                <div style={{ fontSize:"2.5rem", marginBottom:"1rem" }}>🔒</div>
+                <h3 style={{ fontWeight:"800", fontSize:"1.1rem", color:"#cc3300", marginBottom:"0.5rem" }}>
+                  Already Voted
+                </h3>
+                <p style={{ color:"#555", fontSize:"0.85rem", marginBottom:"1.5rem" }}>
+                  This device has already cast a ballot. One vote per device!
+                </p>
+                <button onClick={()=>setView("leaderboard")} style={{
+                  background:"transparent", border:"1px solid #ff6b35", color:"#ff6b35",
+                  padding:"0.7rem 1.8rem", cursor:"pointer",
+                  fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.78rem",
+                  fontWeight:"700", letterSpacing:"0.15em" }}>
+                  SEE STANDINGS →
+                </button>
+              </div>
+            ) : !voterName ? (
+              <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"2.5rem", textAlign:"center" }}>
+                <div style={{ fontSize:"2.5rem", marginBottom:"1rem" }}>🏀</div>
+                <h3 style={{ fontWeight:"800", fontSize:"1.1rem", marginBottom:"0.4rem" }}>Who are you?</h3>
+                <p style={{ color:"#444", fontSize:"0.85rem", marginBottom:"1.5rem" }}>
+                  Rank all {n} players from best to worst
+                </p>
+                <input value={nameInput} onChange={e=>{ setNameInput(e.target.value); setNameError(""); }}
+                  onKeyDown={e=>{ if(e.key==="Enter") handleNameSubmit(); }}
+                  placeholder="Your name..."
+                  style={{ width:"100%", background:"#080810",
+                    border:`1px solid ${nameError?"#cc3300":"#2a2a3a"}`,
+                    color:"#fff", padding:"0.8rem 1rem", fontSize:"1rem",
+                    fontFamily:"'Trebuchet MS',sans-serif", marginBottom:"0.5rem" }}/>
+                {nameError && (
+                  <div style={{ color:"#cc3300", fontSize:"0.78rem", marginBottom:"0.75rem", textAlign:"left" }}>
+                    ⚠ {nameError}
+                  </div>
+                )}
+                <div style={{ marginBottom:"1rem" }}/>
+                <button className="cta" onClick={handleNameSubmit} style={{
+                  background:"#ff6b35", color:"#fff", border:"none",
+                  padding:"0.8rem 2.2rem", fontFamily:"'Trebuchet MS',sans-serif",
+                  fontSize:"0.78rem", fontWeight:"700", letterSpacing:"0.15em", cursor:"pointer" }}>
+                  LET'S GO →
+                </button>
+              </div>
+            ) : submitted ? (
+              <div style={{ background:"#0c0c16", border:"1px solid #ff6b35", padding:"3rem", textAlign:"center" }}>
+                <div style={{ fontSize:"3rem", marginBottom:"1rem" }}>🏆</div>
+                <h3 style={{ fontWeight:"800", fontSize:"1.2rem", color:"#ff6b35" }}>Ballot Submitted!</h3>
+                <p style={{ color:"#555", marginTop:"0.5rem", fontSize:"0.9rem" }}>
+                  Thanks {voterName} — standings are updating live for everyone.
+                </p>
+                <button onClick={()=>setView("leaderboard")} style={{
+                  marginTop:"1.5rem", background:"transparent", border:"1px solid #ff6b35",
+                  color:"#ff6b35", padding:"0.7rem 1.8rem", cursor:"pointer",
+                  fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.78rem",
+                  fontWeight:"700", letterSpacing:"0.15em" }}>
+                  SEE STANDINGS →
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ background:"#0c0c16", border:"1px solid #1a1a26",
+                  padding:"0.85rem 1.2rem", marginBottom:"0.8rem",
+                  display:"flex", alignItems:"center", gap:"0.6rem" }}>
+                  <span style={{ fontSize:"0.68rem", color:"#444", letterSpacing:"0.12em" }}>VOTING AS</span>
+                  <span style={{ fontWeight:"800", color:"#ff6b35" }}>{voterName}</span>
+                </div>
+                <div style={{ background:"#0c0c16", border:"1px solid #1a1a26",
+                  padding:"0.8rem 1.2rem", marginBottom:"1rem",
+                  fontSize:"0.75rem", color:"#555", lineHeight:1.6 }}>
+                  🖱️ <span style={{color:"#888"}}>Desktop:</span> drag & drop &nbsp;·&nbsp;
+                  📱 <span style={{color:"#888"}}>Mobile:</span> tap ↑ ↓ &nbsp;·&nbsp;
+                  1st = <span style={{color:"#ff6b35",fontWeight:"700"}}>{n} pts</span>, last = 1 pt
+                </div>
+                <div style={{ fontSize:"0.72rem", letterSpacing:"0.18em", color:"#ff6b35",
+                  textAlign:"center", marginBottom:"1rem", fontWeight:"700" }}>
+                  BEST (TOP) → WORST (BOTTOM)
+                </div>
+
+                {ranking.map((id, idx) => {
+                  const player = data.players.find(p => p.id===id);
+                  if (!player) return null;
+                  const awarded = n - idx;
+                  const isTop = idx===0;
+                  const rankLabel = ["1ST","2ND","3RD","4TH","5TH","6TH","7TH","8TH"][idx]||`${idx+1}TH`;
+                  return (
+                    <div key={id} draggable
+                      onDragStart={e=>onDragStart(e,id)} onDragOver={e=>onDragOver(e,id)}
+                      onDrop={e=>onDrop(e,id)} onDragEnd={onDragEnd}
+                      className={`rank-row ${dragOver===id?"drag-over":""} ${dragging===id?"is-dragging":""}`}
+                      style={{
+                        background:isTop?"linear-gradient(135deg,#1c0900,#110500)":"#0c0c16",
+                        border:`1px solid ${isTop?"#ff6b35":"#1a1a26"}`,
+                        padding:"0.95rem 1.2rem", marginBottom:"0.55rem",
+                        display:"flex", alignItems:"center", gap:"0.85rem",
+                        cursor:"grab", userSelect:"none",
+                        animation:`fadeUp .3s ${idx*.04}s ease both`,
+                      }}>
+                      <div style={{ width:"38px", height:"36px", flexShrink:0,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        background:isTop?"#ff6b35":"#080810",
+                        color:isTop?"#fff":"#444", fontWeight:"900", fontSize:"0.75rem" }}>
+                        {rankLabel}
+                      </div>
+                      <span style={{ fontSize:"1.5rem" }}>{player.emoji}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:"800", fontSize:"0.96rem", color:isTop?"#ff6b35":"#ddd" }}>
+                          {player.name}
+                        </div>
+                        <div style={{ fontSize:"0.7rem", color:isTop?"#ff6b3599":"#444", marginTop:"0.1rem" }}>
+                          earns {awarded} point{awarded!==1?"s":""}
+                        </div>
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:"3px" }}>
+                        <button className="updown" onClick={()=>moveUp(id)} disabled={idx===0}>↑</button>
+                        <button className="updown" onClick={()=>moveDown(id)} disabled={idx===ranking.length-1}>↓</button>
+                      </div>
+                      <div style={{ color:"#2a2a3a", fontSize:"1.2rem", flexShrink:0 }}>⠿</div>
+                    </div>
+                  );
+                })}
+
+                <div style={{ background:"#0c0c16", border:"1px solid #1a1a26",
+                  padding:"0.85rem 1.2rem", margin:"1rem 0",
+                  fontSize:"0.73rem", color:"#555", lineHeight:1.8 }}>
+                  <span style={{ color:"#666", letterSpacing:"0.1em" }}>YOUR BALLOT: </span>
+                  {ranking.map((id,i) => {
+                    const p = data.players.find(p=>p.id===id);
+                    return p ? <span key={id} style={{ color:i===0?"#ff6b35":"#555" }}>
+                      {i>0?" → ":""}{p.name}
+                    </span> : null;
+                  })}
+                </div>
+
+                <div style={{ textAlign:"center" }}>
+                  <button className="cta" onClick={submitBallot} style={{
+                    background:"linear-gradient(135deg,#ff6b35,#cc2200)", color:"#fff", border:"none",
+                    padding:"1rem 3rem", fontFamily:"'Trebuchet MS',sans-serif",
+                    fontSize:"0.82rem", fontWeight:"700", letterSpacing:"0.2em",
+                    cursor:"pointer", boxShadow:"0 4px 20px rgba(255,107,53,.3)" }}>
+                    LOCK IN BALLOT ✓
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ ADMIN ══ */}
+        {view==="admin" && (
+          <div style={{ animation:"fadeUp .35s ease" }}>
+            {!adminUnlocked ? (
+              <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"2.5rem", textAlign:"center" }}>
+                <div style={{ fontSize:"2rem", marginBottom:"1rem" }}>🔒</div>
+                <h3 style={{ fontWeight:"800", marginBottom:"0.5rem" }}>Admin Access</h3>
+                <p style={{ color:"#444", fontSize:"0.85rem", marginBottom:"1.5rem" }}>
+                  Default password: <span style={{color:"#666"}}>squad123</span>
+                </p>
+                <input type="password" value={adminInput} onChange={e=>setAdminInput(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter") adminInput==="squad123"?setAdminUnlocked(true):showToast("Wrong password","error"); }}
+                  placeholder="Password..."
+                  style={{ width:"100%", background:"#080810", border:"1px solid #2a2a3a",
+                    color:"#fff", padding:"0.8rem 1rem", fontSize:"1rem",
+                    fontFamily:"'Trebuchet MS',sans-serif", marginBottom:"1rem" }}/>
+                <button onClick={()=>adminInput==="squad123"?setAdminUnlocked(true):showToast("Wrong password","error")} style={{
+                  background:"#ff6b35", color:"#fff", border:"none",
+                  padding:"0.8rem 2rem", fontFamily:"'Trebuchet MS',sans-serif",
+                  fontSize:"0.78rem", fontWeight:"700", letterSpacing:"0.15em", cursor:"pointer" }}>
+                  UNLOCK
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"1.5rem", marginBottom:"1rem" }}>
+                  <h3 style={{ fontWeight:"800", fontSize:"0.82rem", letterSpacing:"0.15em",
+                    color:"#ff6b35", marginBottom:"1.2rem" }}>＋ ADD PLAYER</h3>
+                  <input value={newPlayerName} onChange={e=>setNewPlayerName(e.target.value)}
+                    placeholder="Player name..."
+                    style={{ width:"100%", background:"#080810", border:"1px solid #2a2a3a",
+                      color:"#fff", padding:"0.7rem 1rem", fontSize:"0.9rem",
+                      fontFamily:"'Trebuchet MS',sans-serif", marginBottom:"0.75rem" }}/>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:"0.35rem", marginBottom:"0.75rem" }}>
+                    {EMOJIS.map(em => (
+                      <button key={em} onClick={()=>setNewPlayerEmoji(em)} style={{
+                        fontSize:"1.2rem", padding:"0.3rem 0.5rem",
+                        background:newPlayerEmoji===em?"#ff6b35":"#080810",
+                        border:`1px solid ${newPlayerEmoji===em?"#ff6b35":"#2a2a3a"}`,
+                        cursor:"pointer", transition:"all .15s" }}>
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={addPlayer} style={{
+                    background:"#ff6b35", color:"#fff", border:"none",
+                    padding:"0.7rem 1.5rem", fontFamily:"'Trebuchet MS',sans-serif",
+                    fontSize:"0.78rem", fontWeight:"700", letterSpacing:"0.15em", cursor:"pointer" }}>
+                    ADD PLAYER
+                  </button>
+                </div>
+
+                <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"1.5rem", marginBottom:"1rem" }}>
+                  <h3 style={{ fontWeight:"800", fontSize:"0.82rem", letterSpacing:"0.15em",
+                    color:"#ff6b35", marginBottom:"1.2rem" }}>PLAYERS ({data.players.length})</h3>
+                  {data.players.map(p => (
+                    <div key={p.id} style={{ display:"flex", alignItems:"center", gap:"0.75rem",
+                      padding:"0.65rem 0", borderBottom:"1px solid #111120" }}>
+                      <span style={{ fontSize:"1.3rem" }}>{p.emoji}</span>
+                      <span style={{ flex:1, fontWeight:"700", fontSize:"0.95rem" }}>{p.name}</span>
+                      <span style={{ color:"#ff6b35", fontWeight:"700", fontSize:"0.85rem", minWidth:"50px", textAlign:"right" }}>
+                        {getPoints(p.id)} pts
+                      </span>
+                      <button onClick={()=>removePlayer(p.id)} style={{
+                        background:"transparent", border:"1px solid #330000",
+                        color:"#882200", padding:"0.25rem 0.65rem",
+                        fontSize:"0.72rem", cursor:"pointer",
+                        fontFamily:"'Trebuchet MS',sans-serif", letterSpacing:"0.08em" }}>
+                        ✕ REMOVE
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"1.5rem" }}>
+                  <h3 style={{ fontWeight:"800", fontSize:"0.82rem", letterSpacing:"0.15em",
+                    color:"#882200", marginBottom:"0.5rem" }}>⚠ DANGER ZONE</h3>
+                  <p style={{ color:"#444", fontSize:"0.82rem", marginBottom:"1rem" }}>
+                    Wipes all ballots and resets points to zero.
+                  </p>
+                  <button onClick={resetAll} style={{
+                    background:"transparent", border:"1px solid #882200",
+                    color:"#882200", padding:"0.7rem 1.5rem",
+                    fontFamily:"'Trebuchet MS',sans-serif",
+                    fontSize:"0.78rem", fontWeight:"700", letterSpacing:"0.15em", cursor:"pointer" }}>
+                    RESET ALL VOTES
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

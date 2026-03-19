@@ -9,8 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
+  import { getDatabase, ref, onValue, set, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
   const firebaseConfig = {
     apiKey: "AIzaSyBVsXvrTglnTY8BOwjBXc1Qp5K45L9LVJE",
     authDomain: "goat--vote1.firebaseapp.com",
@@ -20,31 +19,22 @@
     messagingSenderId: "240656651536",
     appId: "1:240656651536:web:ff0dcb1323535e40fe0195"
   };
-
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
-
-  window._fb = { db, ref, onValue, set, update, remove };
+  window._fb = { db, ref, onValue, set, remove };
 </script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html,body{background:#080810;min-height:100vh}
   body{font-family:'Trebuchet MS',sans-serif;color:#fff;overflow-x:hidden}
-  body::before{
-    content:'';
-    position:fixed;
-    inset:0;
+  body::before{content:'';position:fixed;inset:0;
     background-image:url('https://upload.wikimedia.org/wikipedia/en/thumb/0/03/National_Basketball_Association_logo.svg/800px-National_Basketball_Association_logo.svg.png');
-    background-size:65%;
-    background-position:center center;
-    background-repeat:no-repeat;
-    filter:blur(6px) brightness(0.18) saturate(1.4);
-    z-index:0;
-    transform:scale(1.05);
-  }
+    background-size:65%;background-position:center center;background-repeat:no-repeat;
+    filter:blur(6px) brightness(0.18) saturate(1.4);z-index:0;transform:scale(1.05);}
   @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
   @keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  @keyframes podiumRise{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
   .rank-row{transition:transform .15s,box-shadow .15s,border-color .15s}
   .rank-row.drag-over{border-color:#ff6b35!important;transform:scale(1.015)}
   .rank-row.is-dragging{opacity:.35}
@@ -54,7 +44,7 @@
   .tab{transition:all .2s;cursor:pointer;border:none}
   .cta{transition:all .25s!important}
   .cta:hover{transform:translateY(-2px)!important;box-shadow:0 14px 40px rgba(255,107,53,.4)!important}
-  input:focus{border-color:#ff6b35!important;outline:none}
+  input:focus,textarea:focus{border-color:#ff6b35!important;outline:none}
   ::-webkit-scrollbar{width:4px}
   ::-webkit-scrollbar-track{background:#0a0a12}
   ::-webkit-scrollbar-thumb{background:#ff6b35}
@@ -67,15 +57,16 @@
 const { useState, useEffect, useRef } = React;
 
 const DEFAULT_PLAYERS = [
-  { id: 1, name: "Player 1", emoji: "🏀" },
-  { id: 2, name: "Player 2", emoji: "⚡" },
-  { id: 3, name: "Player 3", emoji: "🔥" },
-  { id: 4, name: "Player 4", emoji: "💪" },
-  { id: 5, name: "Player 5", emoji: "🎯" },
-  { id: 6, name: "Player 6", emoji: "👑" },
+  { id: 1, name: "Player 1", emoji: "🏀", ppg:"0", apg:"0", rpg:"0" },
+  { id: 2, name: "Player 2", emoji: "⚡", ppg:"0", apg:"0", rpg:"0" },
+  { id: 3, name: "Player 3", emoji: "🔥", ppg:"0", apg:"0", rpg:"0" },
+  { id: 4, name: "Player 4", emoji: "💪", ppg:"0", apg:"0", rpg:"0" },
+  { id: 5, name: "Player 5", emoji: "🎯", ppg:"0", apg:"0", rpg:"0" },
+  { id: 6, name: "Player 6", emoji: "👑", ppg:"0", apg:"0", rpg:"0" },
 ];
 
 const EMOJIS = ["🏀","⚡","🔥","💪","🎯","👑","🐐","💯","🦅","🌪️","🏆","⭐","😤","🥶","🫡","🐉"];
+const DEVICE_KEY = "goat-vote-device-voted";
 
 function getBadge(rank) {
   if (rank === 0) return { icon: "👑", color: "#FFD700" };
@@ -84,11 +75,49 @@ function getBadge(rank) {
   return { icon: `${rank + 1}`, color: "#444" };
 }
 
-const DEVICE_KEY = "goat-vote-device-voted";
+function Podium({ sorted, getPoints }) {
+  if (sorted.length < 3) return null;
+  const hasVotes = getPoints(sorted[0].id) > 0;
+  if (!hasVotes) return null;
+  const first = sorted[0], second = sorted[1], third = sorted[2];
+  const podiumData = [
+    { player: second, place: 2, height: "90px", color: "#C0C0C0", bg: "#1a1a2a", delay: "0.1s" },
+    { player: first,  place: 1, height: "130px", color: "#FFD700", bg: "#1c0900", delay: "0s" },
+    { player: third,  place: 3, height: "65px",  color: "#CD7F32", bg: "#151520", delay: "0.2s" },
+  ];
+  return (
+    <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"center",
+      gap:"0.4rem", marginBottom:"2rem", padding:"0 0.5rem" }}>
+      {podiumData.map(({ player, place, height, color, bg, delay }) => (
+        <div key={place} style={{ flex:1, display:"flex", flexDirection:"column",
+          alignItems:"center", animation:`podiumRise .6s ${delay} ease both` }}>
+          {/* Player info above podium */}
+          <div style={{ textAlign:"center", marginBottom:"0.5rem" }}>
+            <div style={{ fontSize: place===1?"2rem":"1.5rem" }}>{player.emoji}</div>
+            <div style={{ fontSize:"0.72rem", fontWeight:"800", color: place===1?"#ff6b35":"#aaa",
+              marginTop:"0.2rem", letterSpacing:"0.02em" }}>{player.name}</div>
+            <div style={{ fontSize:"0.65rem", color:color, fontWeight:"700" }}>
+              {getPoints(player.id)} pts
+            </div>
+          </div>
+          {/* Podium block */}
+          <div style={{ width:"100%", height, background:bg,
+            border:`2px solid ${color}44`, borderBottom:"none",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            position:"relative", overflow:"hidden" }}>
+            <div style={{ position:"absolute", top:0, left:0, right:0, height:"3px",
+              background:`linear-gradient(90deg, transparent, ${color}, transparent)` }}/>
+            <span style={{ fontSize: place===1?"2rem":"1.5rem", fontWeight:"900",
+              color, opacity:0.8 }}>{place}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function App() {
-  const [data, setData] = useState({ players: DEFAULT_PLAYERS, ballots: {} });
-  const [connected, setConnected] = useState(false);
+  const [data, setData] = useState({ players: DEFAULT_PLAYERS, ballots: {}, trash: {} });
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("leaderboard");
   const [voterName, setVoterName] = useState("");
@@ -104,31 +133,31 @@ function App() {
   const [adminInput, setAdminInput] = useState("");
   const [newPlayerName, setNewPlayerName] = useState("");
   const [newPlayerEmoji, setNewPlayerEmoji] = useState("🏀");
+  const [newPPG, setNewPPG] = useState("");
+  const [newAPG, setNewAPG] = useState("");
+  const [newRPG, setNewRPG] = useState("");
+  const [trashInput, setTrashInput] = useState("");
+  const [trashName, setTrashName] = useState("");
 
-  // Wait for Firebase to load then subscribe to live data
   useEffect(() => {
     const interval = setInterval(() => {
       if (!window._fb) return;
       clearInterval(interval);
       const { db, ref, onValue } = window._fb;
-
-      // Subscribe to live updates — fires instantly on any change from anyone
-      const dataRef = ref(db, "goat-vote");
-      onValue(dataRef, (snapshot) => {
+      onValue(ref(db, "goat-vote"), (snapshot) => {
         const val = snapshot.val();
         if (val) {
           setData({
             players: val.players ? Object.values(val.players) : DEFAULT_PLAYERS,
-            ballots: val.ballots || {}
+            ballots: val.ballots || {},
+            trash: val.trash || {}
           });
         } else {
-          // First time — initialize database with default players
           const { set } = window._fb;
           const playersObj = {};
           DEFAULT_PLAYERS.forEach(p => { playersObj[p.id] = p; });
-          set(ref(db, "goat-vote"), { players: playersObj, ballots: {} });
+          set(ref(db, "goat-vote"), { players: playersObj, ballots: {}, trash: {} });
         }
-        setConnected(true);
         setLoading(false);
       });
     }, 100);
@@ -173,9 +202,7 @@ function App() {
     return Math.max(...vals, 1);
   }
 
-  function totalBallots() {
-    return Object.keys(data.ballots).length;
-  }
+  function totalBallots() { return Object.keys(data.ballots).length; }
 
   function onDragStart(e, id) { setDragging(id); e.dataTransfer.effectAllowed = "move"; }
   function onDragOver(e, id) { e.preventDefault(); setDragOver(id); }
@@ -200,7 +227,6 @@ function App() {
   function handleNameSubmit() {
     const name = nameInput.trim();
     if (!name) return;
-    // Check if name already used in Firebase ballots
     const key = name.toLowerCase().replace(/[.#$/\[\]]/g, "_");
     if (data.ballots && data.ballots[key] !== undefined) {
       setNameError("That name already voted! Use your real name.");
@@ -215,19 +241,40 @@ function App() {
     const { db, ref, set } = window._fb;
     const key = voterName.trim().toLowerCase().replace(/[.#$/\[\]]/g, "_");
     set(ref(db, `goat-vote/ballots/${key}`), ranking);
-    // Lock this device
     localStorage.setItem(DEVICE_KEY, "1");
     setDeviceVoted(true);
     setSubmitted(true);
     showToast("Ballot locked in! 🏀");
   }
 
+  function submitTrash() {
+    if (!trashInput.trim() || !trashName.trim() || !window._fb) return;
+    const { db, ref, set } = window._fb;
+    const key = Date.now();
+    set(ref(db, `goat-vote/trash/${key}`), {
+      name: trashName.trim(),
+      msg: trashInput.trim(),
+      time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+    });
+    setTrashInput("");
+    showToast("🔥 Sent!");
+  }
+
+  function deleteTrash(key) {
+    if (!window._fb) return;
+    const { db, ref, remove } = window._fb;
+    remove(ref(db, `goat-vote/trash/${key}`));
+  }
+
   function addPlayer() {
     if (!newPlayerName.trim() || !window._fb) return;
     const { db, ref, set } = window._fb;
-    const p = { id: Date.now(), name: newPlayerName.trim(), emoji: newPlayerEmoji };
+    const p = {
+      id: Date.now(), name: newPlayerName.trim(), emoji: newPlayerEmoji,
+      ppg: newPPG || "0", apg: newAPG || "0", rpg: newRPG || "0"
+    };
     set(ref(db, `goat-vote/players/${p.id}`), p);
-    setNewPlayerName("");
+    setNewPlayerName(""); setNewPPG(""); setNewAPG(""); setNewRPG("");
     showToast(`${p.name} added!`);
   }
 
@@ -235,7 +282,7 @@ function App() {
     if (!window._fb) return;
     const { db, ref, remove } = window._fb;
     remove(ref(db, `goat-vote/players/${id}`));
-    remove(ref(db, `goat-vote/ballots`)); // clear ballots when roster changes
+    remove(ref(db, `goat-vote/ballots`));
     showToast("Player removed. Votes reset.");
   }
 
@@ -244,9 +291,7 @@ function App() {
     const { db, ref, remove } = window._fb;
     remove(ref(db, `goat-vote/ballots`));
     localStorage.removeItem(DEVICE_KEY);
-    setDeviceVoted(false);
-    setSubmitted(false);
-    setVoterName("");
+    setDeviceVoted(false); setSubmitted(false); setVoterName("");
     showToast("All votes reset!");
   }
 
@@ -254,9 +299,7 @@ function App() {
     <div style={{ background:"#080810", minHeight:"100vh", display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center", gap:"1rem" }}>
       <div style={{ fontSize:"2.5rem" }}>🏀</div>
-      <div style={{ color:"#ff6b35", fontFamily:"monospace", fontSize:"1rem", letterSpacing:"0.3em" }}>
-        CONNECTING...
-      </div>
+      <div style={{ color:"#ff6b35", fontFamily:"monospace", fontSize:"1rem", letterSpacing:"0.3em" }}>CONNECTING...</div>
     </div>
   );
 
@@ -264,6 +307,7 @@ function App() {
   const maxPts = getMaxPoints();
   const numBallots = totalBallots();
   const n = data.players.length;
+  const trashList = Object.entries(data.trash || {}).sort((a,b) => Number(b[0]) - Number(a[0]));
 
   return (
     <div style={{ background:"#080810", minHeight:"100vh", position:"relative" }}>
@@ -289,18 +333,14 @@ function App() {
 
         {/* HEADER */}
         <div style={{ textAlign:"center", padding:"2.5rem 0 1.5rem" }}>
-          <div style={{ fontSize:"0.67rem", letterSpacing:"0.45em", color:"#ff6b35", marginBottom:"0.5rem" }}>
-            ◆ &nbsp; SQUAD RANKED BALLOT &nbsp; ◆
-          </div>
+          <div style={{ fontSize:"0.67rem", letterSpacing:"0.45em", color:"#ff6b35", marginBottom:"0.5rem" }}>◆ &nbsp; SQUAD RANKED BALLOT &nbsp; ◆</div>
           <h1 style={{ fontSize:"clamp(1.9rem,8vw,3rem)", fontWeight:"900",
             background:"linear-gradient(135deg,#fff 0%,#ff6b35 55%,#ff2200 100%)",
             WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
-            letterSpacing:"-0.02em", lineHeight:1, marginBottom:"0.4rem" }}>
-            WHO'S THE GOAT?
-          </h1>
+            letterSpacing:"-0.02em", lineHeight:1, marginBottom:"0.4rem" }}>WHO'S THE GOAT?</h1>
           <p style={{ color:"#444", fontSize:"0.82rem", letterSpacing:"0.1em" }}>
             <span className="live-dot"></span>
-            {numBallots} ballot{numBallots!==1?"s":""} &nbsp;·&nbsp; 1st = {n}pts · last = 1pt &nbsp;·&nbsp; <span style={{color:"#4caf50"}}>live</span>
+            {numBallots} ballot{numBallots!==1?"s":""} &nbsp;·&nbsp; 1st={n}pts · last=1pt &nbsp;·&nbsp; <span style={{color:"#4caf50"}}>live</span>
           </p>
         </div>
 
@@ -308,16 +348,17 @@ function App() {
         <div style={{ display:"flex", marginBottom:"2rem", border:"1px solid #1a1a26", overflow:"hidden" }}>
           {[
             {id:"leaderboard", label:"🏆 STANDINGS"},
-            {id:"vote",        label:"🗳️ CAST BALLOT"},
+            {id:"vote",        label:"🗳️ VOTE"},
+            {id:"trash",       label:"🔥 TRASH TALK"},
             {id:"admin",       label:"⚙️ MANAGE"},
           ].map(tab => (
             <button key={tab.id} className="tab"
               onClick={() => tab.id==="vote" ? enterVote() : setView(tab.id)}
-              style={{ flex:1, padding:"0.78rem",
+              style={{ flex:1, padding:"0.65rem 0.3rem",
                 background:view===tab.id?"#ff6b35":"transparent",
                 color:view===tab.id?"#fff":"#555",
-                fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.7rem",
-                fontWeight:"700", letterSpacing:"0.1em" }}>
+                fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.62rem",
+                fontWeight:"700", letterSpacing:"0.06em" }}>
               {tab.label}
             </button>
           ))}
@@ -326,13 +367,14 @@ function App() {
         {/* ══ STANDINGS ══ */}
         {view==="leaderboard" && (
           <div>
+            {/* PODIUM */}
+            <Podium sorted={sorted} getPoints={getPoints} />
+
             <div style={{ background:"#0c0c16", border:"1px solid #1a1a26",
               padding:"0.85rem 1.2rem", marginBottom:"1rem",
               display:"flex", alignItems:"center", gap:"0.8rem", flexWrap:"wrap" }}>
               <span style={{ fontSize:"0.7rem", color:"#444", letterSpacing:"0.12em" }}>SCORING:</span>
-              <span style={{ fontSize:"0.72rem", color:"#666" }}>
-                1st = {n}pts &nbsp;·&nbsp; 2nd = {n-1}pts &nbsp;·&nbsp; last = 1pt
-              </span>
+              <span style={{ fontSize:"0.72rem", color:"#666" }}>1st={n}pts &nbsp;·&nbsp; 2nd={n-1}pts &nbsp;·&nbsp; last=1pt</span>
               <span style={{ marginLeft:"auto", color:"#ff6b35", fontWeight:"700", fontSize:"0.75rem" }}>
                 {numBallots} voter{numBallots!==1?"s":""}
               </span>
@@ -367,8 +409,14 @@ function App() {
                     </div>
                     <span style={{ fontSize:"1.6rem" }}>{player.emoji}</span>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontWeight:"800", fontSize:"1rem",
-                        color:isFirst?"#ff6b35":"#fff" }}>{player.name}</div>
+                      <div style={{ fontWeight:"800", fontSize:"1rem", color:isFirst?"#ff6b35":"#fff" }}>
+                        {player.name}
+                      </div>
+                      {(player.ppg!=="0"||player.apg!=="0"||player.rpg!=="0") && (
+                        <div style={{ fontSize:"0.68rem", color:"#555", marginTop:"0.2rem" }}>
+                          {player.ppg} PPG &nbsp;·&nbsp; {player.apg} APG &nbsp;·&nbsp; {player.rpg} RPG
+                        </div>
+                      )}
                     </div>
                     <div style={{ textAlign:"right", flexShrink:0 }}>
                       <div style={{ fontSize:"1.9rem", fontWeight:"900", lineHeight:1,
@@ -403,17 +451,12 @@ function App() {
             {deviceVoted ? (
               <div style={{ background:"#0c0c16", border:"1px solid #882200", padding:"2.5rem", textAlign:"center" }}>
                 <div style={{ fontSize:"2.5rem", marginBottom:"1rem" }}>🔒</div>
-                <h3 style={{ fontWeight:"800", fontSize:"1.1rem", color:"#cc3300", marginBottom:"0.5rem" }}>
-                  Already Voted
-                </h3>
-                <p style={{ color:"#555", fontSize:"0.85rem", marginBottom:"1.5rem" }}>
-                  This device has already cast a ballot. One vote per device!
-                </p>
+                <h3 style={{ fontWeight:"800", fontSize:"1.1rem", color:"#cc3300", marginBottom:"0.5rem" }}>Already Voted</h3>
+                <p style={{ color:"#555", fontSize:"0.85rem", marginBottom:"1.5rem" }}>This device has already cast a ballot. One vote per device!</p>
                 <button onClick={()=>setView("leaderboard")} style={{
                   background:"transparent", border:"1px solid #ff6b35", color:"#ff6b35",
                   padding:"0.7rem 1.8rem", cursor:"pointer",
-                  fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.78rem",
-                  fontWeight:"700", letterSpacing:"0.15em" }}>
+                  fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.78rem", fontWeight:"700", letterSpacing:"0.15em" }}>
                   SEE STANDINGS →
                 </button>
               </div>
@@ -421,9 +464,7 @@ function App() {
               <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"2.5rem", textAlign:"center" }}>
                 <div style={{ fontSize:"2.5rem", marginBottom:"1rem" }}>🏀</div>
                 <h3 style={{ fontWeight:"800", fontSize:"1.1rem", marginBottom:"0.4rem" }}>Who are you?</h3>
-                <p style={{ color:"#444", fontSize:"0.85rem", marginBottom:"1.5rem" }}>
-                  Rank all {n} players from best to worst
-                </p>
+                <p style={{ color:"#444", fontSize:"0.85rem", marginBottom:"1.5rem" }}>Rank all {n} players from best to worst</p>
                 <input value={nameInput} onChange={e=>{ setNameInput(e.target.value); setNameError(""); }}
                   onKeyDown={e=>{ if(e.key==="Enter") handleNameSubmit(); }}
                   placeholder="Your name..."
@@ -431,11 +472,7 @@ function App() {
                     border:`1px solid ${nameError?"#cc3300":"#2a2a3a"}`,
                     color:"#fff", padding:"0.8rem 1rem", fontSize:"1rem",
                     fontFamily:"'Trebuchet MS',sans-serif", marginBottom:"0.5rem" }}/>
-                {nameError && (
-                  <div style={{ color:"#cc3300", fontSize:"0.78rem", marginBottom:"0.75rem", textAlign:"left" }}>
-                    ⚠ {nameError}
-                  </div>
-                )}
+                {nameError && <div style={{ color:"#cc3300", fontSize:"0.78rem", marginBottom:"0.75rem", textAlign:"left" }}>⚠ {nameError}</div>}
                 <div style={{ marginBottom:"1rem" }}/>
                 <button className="cta" onClick={handleNameSubmit} style={{
                   background:"#ff6b35", color:"#fff", border:"none",
@@ -448,14 +485,11 @@ function App() {
               <div style={{ background:"#0c0c16", border:"1px solid #ff6b35", padding:"3rem", textAlign:"center" }}>
                 <div style={{ fontSize:"3rem", marginBottom:"1rem" }}>🏆</div>
                 <h3 style={{ fontWeight:"800", fontSize:"1.2rem", color:"#ff6b35" }}>Ballot Submitted!</h3>
-                <p style={{ color:"#555", marginTop:"0.5rem", fontSize:"0.9rem" }}>
-                  Thanks {voterName} — standings are updating live for everyone.
-                </p>
+                <p style={{ color:"#555", marginTop:"0.5rem", fontSize:"0.9rem" }}>Thanks {voterName} — standings updating live for everyone.</p>
                 <button onClick={()=>setView("leaderboard")} style={{
                   marginTop:"1.5rem", background:"transparent", border:"1px solid #ff6b35",
                   color:"#ff6b35", padding:"0.7rem 1.8rem", cursor:"pointer",
-                  fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.78rem",
-                  fontWeight:"700", letterSpacing:"0.15em" }}>
+                  fontFamily:"'Trebuchet MS',sans-serif", fontSize:"0.78rem", fontWeight:"700", letterSpacing:"0.15em" }}>
                   SEE STANDINGS →
                 </button>
               </div>
@@ -472,12 +506,10 @@ function App() {
                   fontSize:"0.75rem", color:"#555", lineHeight:1.6 }}>
                   🖱️ <span style={{color:"#888"}}>Desktop:</span> drag & drop &nbsp;·&nbsp;
                   📱 <span style={{color:"#888"}}>Mobile:</span> tap ↑ ↓ &nbsp;·&nbsp;
-                  1st = <span style={{color:"#ff6b35",fontWeight:"700"}}>{n} pts</span>, last = 1 pt
+                  1st=<span style={{color:"#ff6b35",fontWeight:"700"}}>{n}pts</span>, last=1pt
                 </div>
                 <div style={{ fontSize:"0.72rem", letterSpacing:"0.18em", color:"#ff6b35",
-                  textAlign:"center", marginBottom:"1rem", fontWeight:"700" }}>
-                  BEST (TOP) → WORST (BOTTOM)
-                </div>
+                  textAlign:"center", marginBottom:"1rem", fontWeight:"700" }}>BEST (TOP) → WORST (BOTTOM)</div>
 
                 {ranking.map((id, idx) => {
                   const player = data.players.find(p => p.id===id);
@@ -485,6 +517,7 @@ function App() {
                   const awarded = n - idx;
                   const isTop = idx===0;
                   const rankLabel = ["1ST","2ND","3RD","4TH","5TH","6TH","7TH","8TH"][idx]||`${idx+1}TH`;
+                  const hasStats = player.ppg!=="0"||player.apg!=="0"||player.rpg!=="0";
                   return (
                     <div key={id} draggable
                       onDragStart={e=>onDragStart(e,id)} onDragOver={e=>onDragOver(e,id)}
@@ -509,9 +542,17 @@ function App() {
                         <div style={{ fontWeight:"800", fontSize:"0.96rem", color:isTop?"#ff6b35":"#ddd" }}>
                           {player.name}
                         </div>
-                        <div style={{ fontSize:"0.7rem", color:isTop?"#ff6b3599":"#444", marginTop:"0.1rem" }}>
-                          earns {awarded} point{awarded!==1?"s":""}
-                        </div>
+                        {hasStats ? (
+                          <div style={{ fontSize:"0.68rem", color:"#666", marginTop:"0.15rem" }}>
+                            <span style={{color:"#ff6b3599"}}>{player.ppg}</span> PPG &nbsp;
+                            <span style={{color:"#aaa"}}>{player.apg}</span> APG &nbsp;
+                            <span style={{color:"#aaa"}}>{player.rpg}</span> RPG
+                          </div>
+                        ) : (
+                          <div style={{ fontSize:"0.7rem", color:isTop?"#ff6b3599":"#444", marginTop:"0.1rem" }}>
+                            earns {awarded} point{awarded!==1?"s":""}
+                          </div>
+                        )}
                       </div>
                       <div style={{ display:"flex", flexDirection:"column", gap:"3px" }}>
                         <button className="updown" onClick={()=>moveUp(id)} disabled={idx===0}>↑</button>
@@ -548,6 +589,54 @@ function App() {
           </div>
         )}
 
+        {/* ══ TRASH TALK ══ */}
+        {view==="trash" && (
+          <div style={{ animation:"fadeUp .35s ease" }}>
+            <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"1.5rem", marginBottom:"1rem" }}>
+              <h3 style={{ fontWeight:"800", fontSize:"0.82rem", letterSpacing:"0.15em",
+                color:"#ff6b35", marginBottom:"1.2rem" }}>🔥 DROP YOUR TAKE</h3>
+              <input value={trashName} onChange={e=>setTrashName(e.target.value)}
+                placeholder="Your name..."
+                style={{ width:"100%", background:"#080810", border:"1px solid #2a2a3a",
+                  color:"#fff", padding:"0.65rem 1rem", fontSize:"0.9rem",
+                  fontFamily:"'Trebuchet MS',sans-serif", marginBottom:"0.6rem" }}/>
+              <textarea value={trashInput} onChange={e=>setTrashInput(e.target.value)}
+                placeholder="Bro can't shoot to save his life 😂"
+                rows={3}
+                style={{ width:"100%", background:"#080810", border:"1px solid #2a2a3a",
+                  color:"#fff", padding:"0.65rem 1rem", fontSize:"0.9rem", resize:"vertical",
+                  fontFamily:"'Trebuchet MS',sans-serif", marginBottom:"0.75rem" }}/>
+              <button onClick={submitTrash} style={{
+                background:"#ff6b35", color:"#fff", border:"none",
+                padding:"0.7rem 1.5rem", fontFamily:"'Trebuchet MS',sans-serif",
+                fontSize:"0.78rem", fontWeight:"700", letterSpacing:"0.15em", cursor:"pointer" }}>
+                SEND IT 🔥
+              </button>
+            </div>
+
+            {trashList.length === 0 ? (
+              <div style={{ textAlign:"center", color:"#333", padding:"3rem", fontSize:"0.9rem" }}>
+                No takes yet. Be the first to talk trash. 😤
+              </div>
+            ) : trashList.map(([key, entry]) => (
+              <div key={key} style={{ background:"#0c0c16", border:"1px solid #1a1a26",
+                padding:"1rem 1.2rem", marginBottom:"0.6rem",
+                animation:"fadeUp .3s ease both" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"0.5rem" }}>
+                  <span style={{ fontWeight:"800", fontSize:"0.82rem", color:"#ff6b35" }}>{entry.name}</span>
+                  <span style={{ fontSize:"0.68rem", color:"#333", marginLeft:"auto" }}>{entry.time}</span>
+                  {adminUnlocked && (
+                    <button onClick={()=>deleteTrash(key)} style={{
+                      background:"transparent", border:"none", color:"#441111",
+                      cursor:"pointer", fontSize:"0.8rem", padding:"0 0.3rem" }}>✕</button>
+                  )}
+                </div>
+                <div style={{ fontSize:"0.88rem", color:"#ccc", lineHeight:1.5 }}>{entry.msg}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ══ ADMIN ══ */}
         {view==="admin" && (
           <div style={{ animation:"fadeUp .35s ease" }}>
@@ -573,6 +662,7 @@ function App() {
               </div>
             ) : (
               <div>
+                {/* Add player */}
                 <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"1.5rem", marginBottom:"1rem" }}>
                   <h3 style={{ fontWeight:"800", fontSize:"0.82rem", letterSpacing:"0.15em",
                     color:"#ff6b35", marginBottom:"1.2rem" }}>＋ ADD PLAYER</h3>
@@ -581,15 +671,25 @@ function App() {
                     style={{ width:"100%", background:"#080810", border:"1px solid #2a2a3a",
                       color:"#fff", padding:"0.7rem 1rem", fontSize:"0.9rem",
                       fontFamily:"'Trebuchet MS',sans-serif", marginBottom:"0.75rem" }}/>
+                  {/* Stats */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"0.5rem", marginBottom:"0.75rem" }}>
+                    {[["PPG",newPPG,setNewPPG],["APG",newAPG,setNewAPG],["RPG",newRPG,setNewRPG]].map(([label,val,setter])=>(
+                      <div key={label}>
+                        <div style={{ fontSize:"0.65rem", color:"#555", letterSpacing:"0.1em", marginBottom:"0.2rem" }}>{label}</div>
+                        <input value={val} onChange={e=>setter(e.target.value)} placeholder="0"
+                          style={{ width:"100%", background:"#080810", border:"1px solid #2a2a3a",
+                            color:"#fff", padding:"0.5rem 0.7rem", fontSize:"0.85rem",
+                            fontFamily:"'Trebuchet MS',sans-serif" }}/>
+                      </div>
+                    ))}
+                  </div>
                   <div style={{ display:"flex", flexWrap:"wrap", gap:"0.35rem", marginBottom:"0.75rem" }}>
                     {EMOJIS.map(em => (
                       <button key={em} onClick={()=>setNewPlayerEmoji(em)} style={{
                         fontSize:"1.2rem", padding:"0.3rem 0.5rem",
                         background:newPlayerEmoji===em?"#ff6b35":"#080810",
                         border:`1px solid ${newPlayerEmoji===em?"#ff6b35":"#2a2a3a"}`,
-                        cursor:"pointer", transition:"all .15s" }}>
-                        {em}
-                      </button>
+                        cursor:"pointer", transition:"all .15s" }}>{em}</button>
                     ))}
                   </div>
                   <button onClick={addPlayer} style={{
@@ -600,6 +700,7 @@ function App() {
                   </button>
                 </div>
 
+                {/* Players list */}
                 <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"1.5rem", marginBottom:"1rem" }}>
                   <h3 style={{ fontWeight:"800", fontSize:"0.82rem", letterSpacing:"0.15em",
                     color:"#ff6b35", marginBottom:"1.2rem" }}>PLAYERS ({data.players.length})</h3>
@@ -607,27 +708,29 @@ function App() {
                     <div key={p.id} style={{ display:"flex", alignItems:"center", gap:"0.75rem",
                       padding:"0.65rem 0", borderBottom:"1px solid #111120" }}>
                       <span style={{ fontSize:"1.3rem" }}>{p.emoji}</span>
-                      <span style={{ flex:1, fontWeight:"700", fontSize:"0.95rem" }}>{p.name}</span>
-                      <span style={{ color:"#ff6b35", fontWeight:"700", fontSize:"0.85rem", minWidth:"50px", textAlign:"right" }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:"700", fontSize:"0.95rem" }}>{p.name}</div>
+                        <div style={{ fontSize:"0.68rem", color:"#444" }}>
+                          {p.ppg} PPG · {p.apg} APG · {p.rpg} RPG
+                        </div>
+                      </div>
+                      <span style={{ color:"#ff6b35", fontWeight:"700", fontSize:"0.85rem", minWidth:"45px", textAlign:"right" }}>
                         {getPoints(p.id)} pts
                       </span>
                       <button onClick={()=>removePlayer(p.id)} style={{
                         background:"transparent", border:"1px solid #330000",
                         color:"#882200", padding:"0.25rem 0.65rem",
                         fontSize:"0.72rem", cursor:"pointer",
-                        fontFamily:"'Trebuchet MS',sans-serif", letterSpacing:"0.08em" }}>
-                        ✕ REMOVE
-                      </button>
+                        fontFamily:"'Trebuchet MS',sans-serif" }}>✕</button>
                     </div>
                   ))}
                 </div>
 
+                {/* Reset */}
                 <div style={{ background:"#0c0c16", border:"1px solid #1a1a26", padding:"1.5rem" }}>
                   <h3 style={{ fontWeight:"800", fontSize:"0.82rem", letterSpacing:"0.15em",
                     color:"#882200", marginBottom:"0.5rem" }}>⚠ DANGER ZONE</h3>
-                  <p style={{ color:"#444", fontSize:"0.82rem", marginBottom:"1rem" }}>
-                    Wipes all ballots and resets points to zero.
-                  </p>
+                  <p style={{ color:"#444", fontSize:"0.82rem", marginBottom:"1rem" }}>Wipes all ballots and resets points to zero.</p>
                   <button onClick={resetAll} style={{
                     background:"transparent", border:"1px solid #882200",
                     color:"#882200", padding:"0.7rem 1.5rem",
